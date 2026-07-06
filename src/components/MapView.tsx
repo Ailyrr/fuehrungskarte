@@ -159,7 +159,7 @@ export default function MapView() {
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <div ref={containerRef} className="absolute inset-0" />
+      <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
       {/* Top bar */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
@@ -248,18 +248,16 @@ export default function MapView() {
       )}
 
       {/* Add FAB */}
-      {!selectedObject && (
-        <button
-          onClick={() => setMenuOpen(true)}
-          className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-3 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-sky-600 text-3xl font-light text-white shadow-lg shadow-sky-900/40 active:bg-sky-700"
-          aria-label="Add object"
-        >
-          +
-        </button>
-      )}
+      <button
+        onClick={() => setMenuOpen(true)}
+        className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-3 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-sky-600 text-3xl font-light text-white shadow-lg shadow-sky-900/40 active:bg-sky-700"
+        aria-label="Add object"
+      >
+        +
+      </button>
 
-      {/* Center crosshair when adding is available */}
-      {!selectedObject && !menuOpen && !editor && (
+      {/* Center crosshair marks where new objects drop */}
+      {!menuOpen && !editor && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-white/40">
           <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
             <line x1="13" y1="2" x2="13" y2="10" stroke="currentColor" strokeWidth="2" />
