@@ -1,12 +1,16 @@
+export type AddKind = 'label' | 'drawing' | 'symbol' | 'custom' | 'area';
+
 interface Props {
-  onSelect: (kind: 'label' | 'drawing' | 'symbol') => void;
+  onSelect: (kind: AddKind) => void;
   onClose: () => void;
 }
 
-const ITEMS: { kind: 'label' | 'drawing' | 'symbol'; icon: string; title: string; desc: string }[] = [
+const ITEMS: { kind: AddKind; icon: string; title: string; desc: string }[] = [
+  { kind: 'area', icon: '⬠', title: 'Area', desc: 'Highlight a region (scales with the map)' },
   { kind: 'label', icon: 'A', title: 'Label', desc: 'Add a text annotation' },
   { kind: 'drawing', icon: '✎', title: 'Drawing', desc: 'Sketch inside a movable box' },
   { kind: 'symbol', icon: '◆', title: 'Tactical symbol', desc: 'NATO APP-6 / MIL-STD-2525' },
+  { kind: 'custom', icon: '✱', title: 'Custom symbol', desc: 'A frame with your own content inside' },
 ];
 
 export default function AddMenu({ onSelect, onClose }: Props) {

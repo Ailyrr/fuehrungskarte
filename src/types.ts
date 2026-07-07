@@ -50,7 +50,41 @@ export interface SymbolObject extends BaseObject {
   label?: string;
 }
 
-export type MapObject = LabelObject | DrawingObject | SymbolObject;
+/**
+ * A custom tactical symbol: a standard NATO affiliation frame with arbitrary
+ * text / content placed inside it.
+ */
+export interface CustomSymbolObject extends BaseObject {
+  type: 'custom';
+  /** milsymbol standard-identity digit: '3' friend, '6' hostile, '4' neutral, '1' unknown. */
+  affiliation: string;
+  /** Free-form content shown inside the frame. */
+  text: string;
+  /** Optional label rendered under the frame. */
+  label?: string;
+  size: number;
+  /** Optional custom frame color; when unset the standard affiliation color is used. */
+  color?: string;
+}
+
+/**
+ * A highlighted region drawn as a polygon. Unlike point objects, areas are
+ * geo-referenced and scale with the map zoom. `lngLat` is the polygon centroid,
+ * used to anchor the label.
+ */
+export interface AreaObject extends BaseObject {
+  type: 'area';
+  points: LngLat[];
+  color: string;
+  label?: string;
+}
+
+export type MapObject =
+  | LabelObject
+  | DrawingObject
+  | SymbolObject
+  | CustomSymbolObject
+  | AreaObject;
 
 export interface Project {
   id: string;

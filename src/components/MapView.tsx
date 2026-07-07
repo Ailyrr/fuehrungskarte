@@ -3,12 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import maplibregl from 'maplibre-gl';
 import { useProjectStore } from '../store/projectStore';
 import { createMarkerElement, updateMarkerElement } from '../lib/markers';
-import type { DrawingObject, LabelObject, MapObject, SymbolObject } from '../types';
+import { areasToFeatureCollection, centroid, draftToFeatureCollection } from '../lib/areas';
+import type {
+  AreaObject,
+  CustomSymbolObject,
+  DrawingObject,
+  LabelObject,
+  LngLat,
+  MapObject,
+  SymbolObject,
+} from '../types';
 import { uid } from '../lib/id';
-import AddMenu from './AddMenu';
+import AddMenu, { type AddKind } from './AddMenu';
 import LabelEditor from './LabelEditor';
 import DrawingCanvas from './DrawingCanvas';
 import SymbolCreator from './SymbolCreator';
+import CustomSymbolCreator from './CustomSymbolCreator';
+import AreaEditor from './AreaEditor';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 
@@ -21,14 +32,59 @@ type EditorState =
   | { kind: 'label'; object: LabelObject | null }
   | { kind: 'drawing'; object: DrawingObject | null }
   | { kind: 'symbol'; object: SymbolObject | null }
+  | { kind: 'custom'; object: CustomSymbolObject | null }
+  | { kind: 'area'; object: AreaObject | null; points?: LngLat[] }
   | null;
+
+function addAreaLayers(map: maplibregl.Map) {
+  const empty = { type: 'FeatureCollection' as const, features: [] };
+  map.addSource('fk-areas', { type: 'geojson', data: empty });
+  map.addLayer({
+    id: 'fk-areas-fill',
+    type: 'fill',
+    source: 'fk-areas',
+    paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.3 },
+  });
+  map.addLayer({
+    id: 'fk-areas-line',
+    type: 'line',
+    source: 'fk-areas',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': ['case', ['==', ['get', 'sel'], 1], '#ffffff', ['get', 'color']],
+      'line-width': ['case', ['==', ['get', 'sel'], 1], 4, 2],
+    },
+  });
+
+  map.addSource('fk-draft', { type: 'geojson', data: empty });
+  map.addLayer({
+    id: 'fk-draft-line',
+    type: 'line',
+    source: 'fk-draft',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': '#38bdf8', 'line-width': 2, 'line-dasharray': [2, 1.5] },
+  });
+  map.addLayer({
+    id: 'fk-draft-pts',
+    type: 'circle',
+    source: 'fk-draft',
+    paint: {
+      'circle-radius': 5,
+      'circle-color': '#38bdf8',
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 2,
+    },
+  });
+}
 
 export default function MapView() {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Map<string, MarkerEntry>>(new Map());
+  const areaLabelsRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const geolocateControlRef = useRef<maplibregl.GeolocateControl | null>(null);
+  const onMapClickRef = useRef<(e: maplibregl.MapMouseEvent) => void>(() => {});
 
   const project = useProjectStore((s) => s.project);
   const objects = project?.objects;
@@ -39,6 +95,9 @@ export default function MapView() {
   const [bearing, setBearing] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editor, setEditor] = useState<EditorState>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  /** null = not drawing; array = polygon vertices captured so far. */
+  const [draftPoints, setDraftPoints] = useState<LngLat[] | null>(null);
 
   const selectedObject = useMemo<MapObject | null>(
     () => objects?.find((o) => o.id === selectedId) ?? null,
@@ -64,19 +123,19 @@ export default function MapView() {
     mapRef.current = map;
 
     const geolocateControl = new maplibregl.GeolocateControl({
-      positionOptions: {
-        enableHighAccuracy: true,
-        timeout: 10000,
-      },
-      fitBoundsOptions: {
-        maxZoom: 17,
-      },
+      positionOptions: { enableHighAccuracy: true, timeout: 10000 },
+      fitBoundsOptions: { maxZoom: 17 },
       trackUserLocation: true,
       showAccuracyCircle: true,
       showUserLocation: true,
     });
     geolocateControlRef.current = geolocateControl;
     map.addControl(geolocateControl, 'bottom-left');
+
+    map.on('load', () => {
+      addAreaLayers(map);
+      setMapLoaded(true);
+    });
 
     map.on('moveend', () => {
       const c = map.getCenter();
@@ -88,22 +147,40 @@ export default function MapView() {
       });
     });
     map.on('rotate', () => setBearing(map.getBearing()));
-    map.on('click', () => useProjectStore.getState().select(null));
+    map.on('click', (e) => onMapClickRef.current(e));
 
     return () => {
       geolocateControlRef.current = null;
       map.remove();
       mapRef.current = null;
       markersRef.current.clear();
+      areaLabelsRef.current.clear();
+      setMapLoaded(false);
     };
   }, []);
 
-  // Reconcile object markers whenever objects or the selection change.
+  // Keep the map click behaviour in sync with the current draw/selection state.
+  useEffect(() => {
+    onMapClickRef.current = (e) => {
+      const map = mapRef.current;
+      if (!map) return;
+      if (draftPoints !== null) {
+        setDraftPoints([...draftPoints, [e.lngLat.lng, e.lngLat.lat]]);
+        return;
+      }
+      const feats = map.queryRenderedFeatures(e.point, { layers: ['fk-areas-fill'] });
+      const hit = feats[0]?.properties?.id as string | undefined;
+      useProjectStore.getState().select(hit ?? null);
+    };
+  }, [draftPoints]);
+
+  // Reconcile point-object markers (labels, drawings, symbols, custom symbols).
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !objects) return;
     const markers = markersRef.current;
-    const present = new Set(objects.map((o) => o.id));
+    const pointObjects = objects.filter((o) => o.type !== 'area');
+    const present = new Set(pointObjects.map((o) => o.id));
 
     for (const [id, entry] of markers) {
       if (!present.has(id)) {
@@ -112,7 +189,7 @@ export default function MapView() {
       }
     }
 
-    for (const object of objects) {
+    for (const object of pointObjects) {
       let entry = markers.get(object.id);
       if (!entry) {
         const el = createMarkerElement(object);
@@ -147,7 +224,47 @@ export default function MapView() {
     }
   }, [objects, selectedId]);
 
-  function mapCenter(): [number, number] {
+  // Reconcile area polygons (map layers) and their centroid labels.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded || !objects) return;
+    const areas = objects.filter((o): o is AreaObject => o.type === 'area');
+
+    const source = map.getSource('fk-areas') as maplibregl.GeoJSONSource | undefined;
+    source?.setData(areasToFeatureCollection(areas, selectedId));
+
+    const labels = areaLabelsRef.current;
+    const present = new Set(areas.filter((a) => a.label).map((a) => a.id));
+    for (const [id, marker] of labels) {
+      if (!present.has(id)) {
+        marker.remove();
+        labels.delete(id);
+      }
+    }
+    for (const area of areas) {
+      if (!area.label) continue;
+      let marker = labels.get(area.id);
+      if (!marker) {
+        const el = document.createElement('div');
+        el.className = 'fk-area-label';
+        el.style.pointerEvents = 'none';
+        marker = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(area.lngLat).addTo(map);
+        labels.set(area.id, marker);
+      }
+      marker.getElement().textContent = area.label;
+      marker.setLngLat(area.lngLat);
+    }
+  }, [objects, selectedId, mapLoaded]);
+
+  // Update the in-progress polygon preview.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+    const source = map.getSource('fk-draft') as maplibregl.GeoJSONSource | undefined;
+    source?.setData(draftToFeatureCollection(draftPoints ?? []));
+  }, [draftPoints, mapLoaded]);
+
+  function mapCenter(): LngLat {
     const c = mapRef.current!.getCenter();
     return [c.lng, c.lat];
   }
@@ -162,8 +279,13 @@ export default function MapView() {
     map.easeTo({ zoom: map.getZoom() + delta, duration: 200 });
   }
 
-  function openEditorFor(kind: 'label' | 'drawing' | 'symbol') {
+  function onAdd(kind: AddKind) {
     setMenuOpen(false);
+    if (kind === 'area') {
+      useProjectStore.getState().select(null);
+      setDraftPoints([]);
+      return;
+    }
     setEditor({ kind, object: null } as EditorState);
   }
 
@@ -172,7 +294,19 @@ export default function MapView() {
     setEditor({ kind: selectedObject.type, object: selectedObject } as EditorState);
   }
 
+  function finishDrawing() {
+    if (!draftPoints || draftPoints.length < 3) return;
+    const points = draftPoints;
+    setDraftPoints(null);
+    setEditor({ kind: 'area', object: null, points });
+  }
+
+  function cancelDrawing() {
+    setDraftPoints(null);
+  }
+
   const store = useProjectStore.getState();
+  const drawing = draftPoints !== null;
 
   return (
     <div className="relative h-full w-full overflow-hidden">
@@ -243,8 +377,38 @@ export default function MapView() {
         </button>
       </div>
 
+      {/* Draw-area mode banner + toolbar */}
+      {drawing && (
+        <>
+          <div className="pointer-events-none absolute inset-x-0 top-16 z-30 flex justify-center px-4">
+            <div className="rounded-full bg-sky-900/90 px-4 py-2 text-sm font-medium text-white shadow backdrop-blur">
+              Tap the map to add points {draftPoints!.length > 0 && `· ${draftPoints!.length} added`}
+            </div>
+          </div>
+          <div className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-gray-900/95 p-1.5 shadow-xl backdrop-blur">
+            <button
+              onClick={() => setDraftPoints((p) => (p && p.length ? p.slice(0, -1) : p))}
+              className="rounded-full bg-gray-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+              disabled={!draftPoints || draftPoints.length === 0}
+            >
+              Undo
+            </button>
+            <button onClick={cancelDrawing} className="rounded-full px-4 py-2.5 text-sm font-semibold text-gray-300">
+              Cancel
+            </button>
+            <button
+              onClick={finishDrawing}
+              disabled={!draftPoints || draftPoints.length < 3}
+              className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white disabled:bg-gray-700 disabled:text-gray-500"
+            >
+              Finish
+            </button>
+          </div>
+        </>
+      )}
+
       {/* Selection toolbar */}
-      {selectedObject && (
+      {selectedObject && !drawing && (
         <div className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-gray-900/95 p-1.5 shadow-xl backdrop-blur">
           <button onClick={editSelected} className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white">
             Edit
@@ -265,16 +429,18 @@ export default function MapView() {
       )}
 
       {/* Add FAB */}
-      <button
-        onClick={() => setMenuOpen(true)}
-        className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-3 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-sky-600 text-3xl font-light text-white shadow-lg shadow-sky-900/40 active:bg-sky-700"
-        aria-label="Add object"
-      >
-        +
-      </button>
+      {!drawing && (
+        <button
+          onClick={() => setMenuOpen(true)}
+          className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-3 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-sky-600 text-3xl font-light text-white shadow-lg shadow-sky-900/40 active:bg-sky-700"
+          aria-label="Add object"
+        >
+          +
+        </button>
+      )}
 
-      {/* Center crosshair marks where new objects drop */}
-      {!menuOpen && !editor && (
+      {/* Center crosshair marks where new point objects drop */}
+      {!menuOpen && !editor && !drawing && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-white/40">
           <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
             <line x1="13" y1="2" x2="13" y2="10" stroke="currentColor" strokeWidth="2" />
@@ -285,7 +451,7 @@ export default function MapView() {
         </div>
       )}
 
-      {menuOpen && <AddMenu onSelect={openEditorFor} onClose={() => setMenuOpen(false)} />}
+      {menuOpen && <AddMenu onSelect={onAdd} onClose={() => setMenuOpen(false)} />}
 
       {editor?.kind === 'label' && (
         <LabelEditor
@@ -332,6 +498,59 @@ export default function MapView() {
               store.updateObject(editor.object.id, { sidc, label, size });
             } else {
               const obj: SymbolObject = { id: uid(), type: 'symbol', lngLat: mapCenter(), sidc, label, size };
+              store.addObject(obj);
+            }
+            setEditor(null);
+          }}
+        />
+      )}
+
+      {editor?.kind === 'custom' && (
+        <CustomSymbolCreator
+          initialAffiliation={editor.object?.affiliation}
+          initialText={editor.object?.text}
+          initialLabel={editor.object?.label}
+          initialColor={editor.object?.color}
+          onCancel={() => setEditor(null)}
+          onSave={({ affiliation, text, label, color, size }) => {
+            if (editor.object) {
+              store.updateObject(editor.object.id, { affiliation, text, label, color, size });
+            } else {
+              const obj: CustomSymbolObject = {
+                id: uid(),
+                type: 'custom',
+                lngLat: mapCenter(),
+                affiliation,
+                text,
+                label,
+                color,
+                size,
+              };
+              store.addObject(obj);
+            }
+            setEditor(null);
+          }}
+        />
+      )}
+
+      {editor?.kind === 'area' && (
+        <AreaEditor
+          isNew={!editor.object}
+          initialColor={editor.object?.color}
+          initialLabel={editor.object?.label}
+          onCancel={() => setEditor(null)}
+          onSave={({ color, label }) => {
+            if (editor.object) {
+              store.updateObject(editor.object.id, { color, label });
+            } else if (editor.points) {
+              const obj: AreaObject = {
+                id: uid(),
+                type: 'area',
+                lngLat: centroid(editor.points),
+                points: editor.points,
+                color,
+                label,
+              };
               store.addObject(obj);
             }
             setEditor(null);

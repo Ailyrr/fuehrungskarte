@@ -63,6 +63,56 @@ body {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
 }
 
+/* Custom tactical symbol: NATO frame with arbitrary text inside */
+.fk-custom-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.fk-custom {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+.fk-custom svg {
+  display: block;
+}
+.fk-custom-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  line-height: 1;
+  color: #111;
+  text-align: center;
+  pointer-events: none;
+  padding: 0 2px;
+  overflow: hidden;
+}
+.fk-symbol-caption {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px #000, 0 0 2px #000;
+  white-space: nowrap;
+}
+
+/* Area (polygon) labels rendered at the centroid */
+.fk-area-label {
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+  text-shadow: 0 1px 2px #000, 0 0 3px #000;
+  pointer-events: none;
+  white-space: nowrap;
+  text-align: center;
+}
+
 /* MapLibre attribution: keep it subtle and out of the way on mobile */
 .maplibregl-ctrl-attrib {
   font-size: 10px;

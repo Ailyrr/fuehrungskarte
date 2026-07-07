@@ -1,5 +1,5 @@
-import type { DrawingObject, LabelObject, MapObject, SymbolObject } from '../types';
-import { symbolToSvg } from './symbols';
+import type { CustomSymbolObject, DrawingObject, LabelObject, MapObject, SymbolObject } from '../types';
+import { frameSvg, symbolToSvg } from './symbols';
 
 function escapeHtml(text: string): string {
   const div = document.createElement('div');
@@ -33,6 +33,18 @@ function symbolHtml(symbol: SymbolObject): string {
   return `<div class="fk-symbol">${symbolToSvg(symbol.sidc, { size: symbol.size, label: symbol.label })}</div>`;
 }
 
+function customHtml(symbol: CustomSymbolObject): string {
+  const { svg, width, height } = frameSvg(symbol.affiliation, symbol.size, symbol.color);
+  const fontSize = Math.max(9, Math.round(height * 0.42));
+  const text = escapeHtml(symbol.text);
+  const label = symbol.label ? `<div class="fk-symbol-caption">${escapeHtml(symbol.label)}</div>` : '';
+  return `<div class="fk-custom-wrap">
+    <div class="fk-custom" style="width:${width}px;height:${height}px;">
+      ${svg}
+      <div class="fk-custom-text" style="font-size:${fontSize}px;">${text}</div>
+    </div>${label}</div>`;
+}
+
 export function objectInnerHtml(object: MapObject): string {
   switch (object.type) {
     case 'label':
@@ -41,6 +53,11 @@ export function objectInnerHtml(object: MapObject): string {
       return drawingHtml(object);
     case 'symbol':
       return symbolHtml(object);
+    case 'custom':
+      return customHtml(object);
+    case 'area':
+      // Areas are rendered as map layers, not point markers.
+      return '';
   }
 }
 

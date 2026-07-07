@@ -126,3 +126,26 @@ export function symbolAnchor(sidc: string, size = 34): { x: number; y: number; w
   const dims = symbol.getSize();
   return { x: anchor.x, y: anchor.y, width: dims.width, height: dims.height };
 }
+
+/**
+ * Render just the NATO affiliation frame (no icon) so custom content can be
+ * overlaid inside it. For frame-only symbols milsymbol centers the frame at the
+ * exact geometric center of the SVG, so overlaid text can sit at 50%/50%.
+ */
+export function frameSvg(
+  affiliation: string,
+  size = 40,
+  color?: string,
+): { svg: string; width: number; height: number } {
+  const sidc = buildSidc({ affiliation, entity: '000000', echelon: '00', status: '0', hq: false });
+  const symbol = new ms.Symbol(sidc, {
+    size,
+    icon: false,
+    fill: true,
+    fillColor: color || undefined,
+    outlineColor: '#000000',
+    outlineWidth: 2,
+  });
+  const dims = symbol.getSize();
+  return { svg: symbol.asSVG(), width: dims.width, height: dims.height };
+}
