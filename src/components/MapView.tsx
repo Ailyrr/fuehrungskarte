@@ -28,6 +28,7 @@ export default function MapView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Map<string, MarkerEntry>>(new Map());
+  const geolocateControlRef = useRef<maplibregl.GeolocateControl | null>(null);
 
   const project = useProjectStore((s) => s.project);
   const objects = project?.objects;
@@ -62,6 +63,21 @@ export default function MapView() {
     });
     mapRef.current = map;
 
+    const geolocateControl = new maplibregl.GeolocateControl({
+      positionOptions: {
+        enableHighAccuracy: true,
+        timeout: 10000,
+      },
+      fitBoundsOptions: {
+        maxZoom: 17,
+      },
+      trackUserLocation: true,
+      showAccuracyCircle: true,
+      showUserLocation: true,
+    });
+    geolocateControlRef.current = geolocateControl;
+    map.addControl(geolocateControl, 'bottom-left');
+
     map.on('moveend', () => {
       const c = map.getCenter();
       useProjectStore.getState().setCamera({
@@ -75,6 +91,7 @@ export default function MapView() {
     map.on('click', () => useProjectStore.getState().select(null));
 
     return () => {
+      geolocateControlRef.current = null;
       map.remove();
       mapRef.current = null;
       markersRef.current.clear();
