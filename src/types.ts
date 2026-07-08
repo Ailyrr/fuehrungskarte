@@ -39,6 +39,8 @@ export interface DrawingObject extends BaseObject {
   /** Container size in CSS pixels (the canvas the strokes were drawn on). */
   w: number;
   h: number;
+  /** Display scale applied when rendering the drawing on the map. */
+  scale?: number;
 }
 
 export interface SymbolObject extends BaseObject {
@@ -94,6 +96,17 @@ export interface Project {
   location: ProjectLocation;
   camera: Camera;
   objects: MapObject[];
+}
+
+export interface CustomSymbolPreset {
+  id: string;
+  name: string;
+  affiliation: string;
+  text: string;
+  label?: string;
+  size: number;
+  color?: string;
+  createdAt: number;
 }
 
 export interface ProjectSummary {

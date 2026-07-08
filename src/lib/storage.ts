@@ -1,4 +1,4 @@
-import type { Project, ProjectExport, ProjectSummary } from '../types';
+import type { CustomSymbolPreset, Project, ProjectExport, ProjectSummary } from '../types';
 import { uid } from './id';
 
 /**
@@ -8,6 +8,7 @@ import { uid } from './id';
  */
 
 const INDEX_KEY = 'fk:projects';
+const CUSTOM_SYMBOL_PRESETS_KEY = 'fk:custom-symbol-presets';
 const projectKey = (id: string) => `fk:project:${id}`;
 
 function readJSON<T>(key: string): T | null {
@@ -27,6 +28,25 @@ function summarize(project: Project): ProjectSummary {
     updatedAt: project.updatedAt,
     objectCount: project.objects.length,
   };
+}
+
+
+export function listCustomSymbolPresets(): CustomSymbolPreset[] {
+  const presets = readJSON<CustomSymbolPreset[]>(CUSTOM_SYMBOL_PRESETS_KEY) ?? [];
+  return [...presets].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function saveCustomSymbolPreset(preset: CustomSymbolPreset): void {
+  const presets = listCustomSymbolPresets().filter((p) => p.id !== preset.id);
+  presets.push(preset);
+  localStorage.setItem(CUSTOM_SYMBOL_PRESETS_KEY, JSON.stringify(presets));
+}
+
+export function deleteCustomSymbolPreset(id: string): void {
+  localStorage.setItem(
+    CUSTOM_SYMBOL_PRESETS_KEY,
+    JSON.stringify(listCustomSymbolPresets().filter((p) => p.id !== id)),
+  );
 }
 
 export function listProjects(): ProjectSummary[] {

@@ -1,12 +1,22 @@
 import { useMemo, useState } from 'react';
 import { AFFILIATIONS, frameSvg } from '../lib/symbols';
 
+interface CustomSymbolValue {
+  affiliation: string;
+  text: string;
+  label: string;
+  color?: string;
+  size: number;
+}
+
 interface Props {
   initialAffiliation?: string;
   initialText?: string;
   initialLabel?: string;
   initialColor?: string;
-  onSave: (value: { affiliation: string; text: string; label: string; color?: string; size: number }) => void;
+  allowPreset?: boolean;
+  onSave: (value: CustomSymbolValue) => void;
+  onSavePreset?: (value: CustomSymbolValue & { name: string }) => void;
   onCancel: () => void;
 }
 
@@ -15,22 +25,40 @@ export default function CustomSymbolCreator({
   initialText = '',
   initialLabel = '',
   initialColor,
+  allowPreset = true,
   onSave,
+  onSavePreset,
   onCancel,
 }: Props) {
   const [affiliation, setAffiliation] = useState(initialAffiliation);
   const [text, setText] = useState(initialText);
   const [label, setLabel] = useState(initialLabel);
+  const [presetName, setPresetName] = useState(initialLabel || initialText || '');
   const [useCustomColor, setUseCustomColor] = useState(!!initialColor);
   const [color, setColor] = useState(initialColor ?? '#f59e0b');
 
   const activeColor = useCustomColor ? color : undefined;
+  const trimmedText = text.trim();
+  const trimmedLabel = label.trim();
+  const trimmedPresetName = presetName.trim();
+  const value: CustomSymbolValue = {
+    affiliation,
+    text: trimmedText,
+    label: trimmedLabel,
+    color: activeColor,
+    size: 44,
+  };
 
   const preview = useMemo(() => {
     const { svg, width, height } = frameSvg(affiliation, 72, activeColor);
     const fontSize = Math.max(12, Math.round(height * 0.42));
     return { svg, width, height, fontSize };
   }, [affiliation, activeColor]);
+
+  function savePreset() {
+    if (!onSavePreset || !trimmedText) return;
+    onSavePreset({ ...value, name: trimmedPresetName || trimmedLabel || trimmedText });
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-gray-950/97 pt-[max(0.5rem,env(safe-area-inset-top))]">
@@ -80,7 +108,10 @@ export default function CustomSymbolCreator({
           <input
             autoFocus
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              if (!presetName.trim()) setPresetName(e.target.value);
+            }}
             placeholder="e.g. HQ, C2, ⚑, 42"
             maxLength={8}
             className="w-full rounded-lg bg-gray-800 px-4 py-3 text-center text-xl font-bold outline-none ring-sky-500 focus:ring-2"
@@ -108,29 +139,54 @@ export default function CustomSymbolCreator({
           )}
         </section>
 
-        <section className="mb-2">
+        <section className="mb-5">
           <h3 className="mb-2 text-sm font-semibold text-gray-400">Label (optional)</h3>
           <input
             value={label}
-            onChange={(e) => setLabel(e.target.value)}
+            onChange={(e) => {
+              setLabel(e.target.value);
+              if (!presetName.trim()) setPresetName(e.target.value);
+            }}
             placeholder="Rendered under the symbol"
             className="w-full rounded-lg bg-gray-800 px-4 py-3 text-base outline-none ring-sky-500 focus:ring-2"
           />
         </section>
+
+        {allowPreset && (
+          <section className="mb-2 rounded-xl border border-sky-900/70 bg-sky-950/30 p-3">
+            <h3 className="mb-2 text-sm font-semibold text-sky-300">Preset name</h3>
+            <input
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              placeholder="Name shown in the presets category"
+              className="w-full rounded-lg bg-gray-800 px-4 py-3 text-base outline-none ring-sky-500 focus:ring-2"
+            />
+            <p className="mt-2 text-xs text-gray-400">
+              Save as preset to reuse this symbol later without placing it on the current map.
+            </p>
+          </section>
+        )}
       </div>
 
       <div className="flex gap-3 border-t border-gray-800 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <button onClick={onCancel} className="flex-1 rounded-lg bg-gray-800 py-3 font-semibold text-gray-300">
+        <button onClick={onCancel} className="rounded-lg bg-gray-800 px-4 py-3 font-semibold text-gray-300">
           Cancel
         </button>
+        {allowPreset && onSavePreset && (
+          <button
+            onClick={savePreset}
+            disabled={!trimmedText}
+            className="flex-1 rounded-lg bg-indigo-600 py-3 font-semibold text-white disabled:bg-gray-700 disabled:text-gray-500"
+          >
+            Save preset
+          </button>
+        )}
         <button
-          onClick={() =>
-            onSave({ affiliation, text: text.trim(), label: label.trim(), color: activeColor, size: 44 })
-          }
-          disabled={!text.trim()}
+          onClick={() => onSave(value)}
+          disabled={!trimmedText}
           className="flex-1 rounded-lg bg-sky-600 py-3 font-semibold text-white disabled:bg-gray-700 disabled:text-gray-500"
         >
-          Save
+          {allowPreset ? 'Add to map' : 'Save'}
         </button>
       </div>
     </div>

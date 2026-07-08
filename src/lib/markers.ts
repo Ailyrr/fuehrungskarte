@@ -26,7 +26,10 @@ function labelHtml(label: LabelObject): string {
 }
 
 function drawingHtml(drawing: DrawingObject): string {
-  return `<div class="fk-drawing" style="width:${drawing.w}px;height:${drawing.h}px;">${strokesToSvg(drawing)}</div>`;
+  const scale = drawing.scale ?? 1;
+  const displayW = Math.round(drawing.w * scale);
+  const displayH = Math.round(drawing.h * scale);
+  return `<div class="fk-drawing" style="width:${displayW}px;height:${displayH}px;">${strokesToSvg(drawing)}</div>`;
 }
 
 function symbolHtml(symbol: SymbolObject): string {

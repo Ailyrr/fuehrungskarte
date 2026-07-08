@@ -7,6 +7,7 @@ import { areasToFeatureCollection, centroid, draftToFeatureCollection } from '..
 import type {
   AreaObject,
   CustomSymbolObject,
+  CustomSymbolPreset,
   DrawingObject,
   LabelObject,
   LngLat,
@@ -14,6 +15,7 @@ import type {
   SymbolObject,
 } from '../types';
 import { uid } from '../lib/id';
+import { listCustomSymbolPresets, saveCustomSymbolPreset } from '../lib/storage';
 import AddMenu, { type AddKind } from './AddMenu';
 import LabelEditor from './LabelEditor';
 import DrawingCanvas from './DrawingCanvas';
@@ -96,6 +98,7 @@ export default function MapView() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editor, setEditor] = useState<EditorState>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [customPresets, setCustomPresets] = useState<CustomSymbolPreset[]>(() => listCustomSymbolPresets());
   /** null = not drawing; array = polygon vertices captured so far. */
   const [draftPoints, setDraftPoints] = useState<LngLat[] | null>(null);
 
@@ -289,6 +292,43 @@ export default function MapView() {
     setEditor({ kind, object: null } as EditorState);
   }
 
+  function addCustomPreset(preset: CustomSymbolPreset) {
+    setMenuOpen(false);
+    const obj: CustomSymbolObject = {
+      id: uid(),
+      type: 'custom',
+      lngLat: mapCenter(),
+      affiliation: preset.affiliation,
+      text: preset.text,
+      label: preset.label,
+      color: preset.color,
+      size: preset.size,
+    };
+    store.addObject(obj);
+  }
+
+  function savePresetFromCustom(value: {
+    name: string;
+    affiliation: string;
+    text: string;
+    label: string;
+    color?: string;
+    size: number;
+  }) {
+    saveCustomSymbolPreset({
+      id: uid(),
+      name: value.name,
+      affiliation: value.affiliation,
+      text: value.text,
+      label: value.label || undefined,
+      color: value.color,
+      size: value.size,
+      createdAt: Date.now(),
+    });
+    setCustomPresets(listCustomSymbolPresets());
+    setEditor(null);
+  }
+
   function editSelected() {
     if (!selectedObject) return;
     setEditor({ kind: selectedObject.type, object: selectedObject } as EditorState);
@@ -451,7 +491,14 @@ export default function MapView() {
         </div>
       )}
 
-      {menuOpen && <AddMenu onSelect={onAdd} onClose={() => setMenuOpen(false)} />}
+      {menuOpen && (
+        <AddMenu
+          presets={customPresets}
+          onSelect={onAdd}
+          onPreset={addCustomPreset}
+          onClose={() => setMenuOpen(false)}
+        />
+      )}
 
       {editor?.kind === 'label' && (
         <LabelEditor
@@ -475,12 +522,13 @@ export default function MapView() {
         <DrawingCanvas
           initialStrokes={editor.object?.strokes}
           initialSize={editor.object ? { w: editor.object.w, h: editor.object.h } : undefined}
+          initialScale={editor.object?.scale}
           onCancel={() => setEditor(null)}
-          onSave={({ strokes, w, h }) => {
+          onSave={({ strokes, w, h, scale }) => {
             if (editor.object) {
-              store.updateObject(editor.object.id, { strokes, w, h });
+              store.updateObject(editor.object.id, { strokes, w, h, scale });
             } else {
-              const obj: DrawingObject = { id: uid(), type: 'drawing', lngLat: mapCenter(), strokes, w, h };
+              const obj: DrawingObject = { id: uid(), type: 'drawing', lngLat: mapCenter(), strokes, w, h, scale };
               store.addObject(obj);
             }
             setEditor(null);
@@ -511,7 +559,9 @@ export default function MapView() {
           initialText={editor.object?.text}
           initialLabel={editor.object?.label}
           initialColor={editor.object?.color}
+          allowPreset={!editor.object}
           onCancel={() => setEditor(null)}
+          onSavePreset={savePresetFromCustom}
           onSave={({ affiliation, text, label, color, size }) => {
             if (editor.object) {
               store.updateObject(editor.object.id, { affiliation, text, label, color, size });

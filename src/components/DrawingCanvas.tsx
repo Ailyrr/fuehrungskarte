@@ -4,18 +4,27 @@ import type { Stroke } from '../types';
 interface Props {
   initialStrokes?: Stroke[];
   initialSize?: { w: number; h: number };
-  onSave: (value: { strokes: Stroke[]; w: number; h: number }) => void;
+  initialScale?: number;
+  onSave: (value: { strokes: Stroke[]; w: number; h: number; scale: number }) => void;
   onCancel: () => void;
 }
 
 const COLORS = ['#111827', '#ef4444', '#38bdf8', '#22c55e', '#eab308'];
 const WIDTHS = [3, 6, 10];
+const DEFAULT_SCALE = 0.6;
 
-export default function DrawingCanvas({ initialStrokes = [], initialSize, onSave, onCancel }: Props) {
+export default function DrawingCanvas({
+  initialStrokes = [],
+  initialSize,
+  initialScale = DEFAULT_SCALE,
+  onSave,
+  onCancel,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [strokes, setStrokes] = useState<Stroke[]>(initialStrokes);
   const [color, setColor] = useState('#111827');
   const [width, setWidth] = useState(6);
+  const [scale, setScale] = useState(initialScale);
   const drawingRef = useRef(false);
   const sizeRef = useRef<{ w: number; h: number }>(
     initialSize ?? { w: 0, h: 0 },
@@ -91,7 +100,7 @@ export default function DrawingCanvas({ initialStrokes = [], initialSize, onSave
   }
 
   function save() {
-    onSave({ strokes, w: sizeRef.current.w, h: sizeRef.current.h });
+    onSave({ strokes, w: sizeRef.current.w, h: sizeRef.current.h, scale });
   }
 
   return (
@@ -115,6 +124,22 @@ export default function DrawingCanvas({ initialStrokes = [], initialSize, onSave
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
+        <label className="rounded-xl bg-gray-900/70 px-3 py-2">
+          <div className="mb-2 flex items-center justify-between text-sm font-semibold text-gray-300">
+            <span>Map scale</span>
+            <span>{Math.round(scale * 100)}%</span>
+          </div>
+          <input
+            type="range"
+            min="20"
+            max="120"
+            step="5"
+            value={Math.round(scale * 100)}
+            onChange={(e) => setScale(Number(e.target.value) / 100)}
+            className="w-full accent-sky-500"
+          />
+        </label>
+
         <div className="flex items-center justify-between">
           <div className="flex gap-2">
             {COLORS.map((c) => (
