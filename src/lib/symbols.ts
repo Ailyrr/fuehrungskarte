@@ -164,7 +164,11 @@ export interface SymbolRenderOptions {
 export function symbolToSvg(sidc: string, options: SymbolRenderOptions = {}): string {
   const symbol = new ms.Symbol(sidc, {
     size: options.size ?? 34,
-    uniqueDesignation: options.label || undefined,
+    // Some tactical-point labels in milsymbol call its string-width helper
+    // whenever the uniqueDesignation option is present; passing undefined then
+    // crashes on `undefined.length`. Empty string renders no text but keeps the
+    // label helper safe for those point symbols.
+    uniqueDesignation: options.label ?? '',
     infoColor: '#ffffff',
     infoSize: 28,
     outlineColor: '#000000',
