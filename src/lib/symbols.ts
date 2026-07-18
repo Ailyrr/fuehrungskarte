@@ -54,6 +54,18 @@ export interface SymbolIcon {
   name: string;
 }
 
+export interface SymbolSetOption {
+  /** 2-digit MIL-STD-2525 / APP-6 symbol set code. */
+  code: string;
+  name: string;
+  description: string;
+  defaultEntity: string;
+  icons: SymbolIcon[];
+  /** Unit-only modifiers that do not apply to tactical points. */
+  allowEchelon: boolean;
+  allowHq: boolean;
+}
+
 /** Curated set of common land-unit icons (symbol set 10). */
 export const LAND_UNIT_ICONS: SymbolIcon[] = [
   { entity: '121100', name: 'Infantry' },
@@ -74,9 +86,49 @@ export const LAND_UNIT_ICONS: SymbolIcon[] = [
   { entity: '121500', name: 'Sniper' },
 ];
 
+/** Curated set of common tactical point symbols (symbol set 25). */
+export const TACTICAL_POINT_ICONS: SymbolIcon[] = [
+  { entity: '160100', name: 'Observation Post / Outpost' },
+  { entity: '160201', name: 'Reconnaissance Outpost' },
+  { entity: '160202', name: 'Forward Observer Position' },
+  { entity: '160203', name: 'CBRN Observation Post' },
+  { entity: '160204', name: 'Sensor / Listening Post' },
+  { entity: '160205', name: 'Combat Outpost' },
+  { entity: '130300', name: 'Checkpoint' },
+  { entity: '130500', name: 'Contact Point' },
+  { entity: '130700', name: 'Decision Point' },
+  { entity: '132200', name: 'Control Point' },
+  { entity: '131400', name: 'Rally Point' },
+  { entity: '160300', name: 'Target Reference Point' },
+  { entity: '180100', name: 'Air Control Point' },
+];
+
 const LAND_UNIT_SET = '10';
+const TACTICAL_POINT_SET = '25';
+
+export const SYMBOL_SETS: SymbolSetOption[] = [
+  {
+    code: LAND_UNIT_SET,
+    name: 'Land units',
+    description: 'Unit frames such as infantry, armour and recon.',
+    defaultEntity: '121100',
+    icons: LAND_UNIT_ICONS,
+    allowEchelon: true,
+    allowHq: true,
+  },
+  {
+    code: TACTICAL_POINT_SET,
+    name: 'Tactical points',
+    description: 'Point symbols such as observation posts and checkpoints.',
+    defaultEntity: '160100',
+    icons: TACTICAL_POINT_ICONS,
+    allowEchelon: false,
+    allowHq: false,
+  },
+];
 
 export interface SidcParts {
+  symbolSet?: string;
   affiliation: string;
   entity: string;
   echelon: string;
@@ -85,15 +137,16 @@ export interface SidcParts {
 }
 
 export function buildSidc(parts: SidcParts): string {
-  const { affiliation, entity, echelon, status, hq } = parts;
+  const { affiliation, entity, echelon, status, hq, symbolSet = LAND_UNIT_SET } = parts;
   const hqtfd = hq ? '2' : '0';
-  const raw = '13' + '0' + affiliation + LAND_UNIT_SET + status + hqtfd + echelon + entity;
+  const raw = '13' + '0' + affiliation + symbolSet + status + hqtfd + echelon + entity;
   return raw.padEnd(20, '0');
 }
 
 export function parseSidc(sidc: string): SidcParts {
   const padded = sidc.padEnd(20, '0');
   return {
+    symbolSet: padded.slice(4, 6) || LAND_UNIT_SET,
     affiliation: padded[3] ?? '3',
     status: padded[6] ?? '0',
     hq: padded[7] === '2',

@@ -1,12 +1,5 @@
 import { useMemo, useState } from 'react';
-import {
-  AFFILIATIONS,
-  buildSidc,
-  ECHELONS,
-  LAND_UNIT_ICONS,
-  parseSidc,
-  symbolToSvg,
-} from '../lib/symbols';
+import { AFFILIATIONS, buildSidc, ECHELONS, parseSidc, SYMBOL_SETS, symbolToSvg } from '../lib/symbols';
 
 interface Props {
   initialSidc?: string;
@@ -17,19 +10,43 @@ interface Props {
 
 export default function SymbolCreator({ initialSidc, initialLabel = '', onSave, onCancel }: Props) {
   const initial = initialSidc ? parseSidc(initialSidc) : null;
+  const initialSymbolSet = SYMBOL_SETS.some((set) => set.code === initial?.symbolSet) ? initial!.symbolSet! : '10';
+  const initialSet = SYMBOL_SETS.find((set) => set.code === initialSymbolSet) ?? SYMBOL_SETS[0];
+  const [symbolSet, setSymbolSet] = useState(initialSet.code);
   const [affiliation, setAffiliation] = useState(initial?.affiliation ?? '3');
-  const [entity, setEntity] = useState(initial?.entity ?? '121100');
+  const [entity, setEntity] = useState(initial?.entity ?? initialSet.defaultEntity);
   const [echelon, setEchelon] = useState(initial?.echelon ?? '00');
   const [status, setStatus] = useState(initial?.status ?? '0');
   const [hq, setHq] = useState(initial?.hq ?? false);
   const [label, setLabel] = useState(initialLabel);
 
+  const activeSet = useMemo(() => SYMBOL_SETS.find((set) => set.code === symbolSet) ?? SYMBOL_SETS[0], [symbolSet]);
   const sidc = useMemo(
-    () => buildSidc({ affiliation, entity, echelon, status, hq }),
-    [affiliation, entity, echelon, status, hq],
+    () =>
+      buildSidc({
+        symbolSet,
+        affiliation,
+        entity,
+        echelon: activeSet.allowEchelon ? echelon : '00',
+        status,
+        hq: activeSet.allowHq ? hq : false,
+      }),
+    [activeSet.allowEchelon, activeSet.allowHq, affiliation, echelon, entity, hq, status, symbolSet],
   );
   const previewSvg = useMemo(() => symbolToSvg(sidc, { size: 60, label }), [sidc, label]);
-  const iconSvg = (e: string) => symbolToSvg(buildSidc({ affiliation, entity: e, echelon: '00', status: '0', hq: false }), { size: 24 });
+  const iconSvg = (e: string) =>
+    symbolToSvg(
+      buildSidc({ symbolSet, affiliation, entity: e, echelon: '00', status: '0', hq: false }),
+      { size: symbolSet === '25' ? 28 : 24 },
+    );
+
+  function chooseSymbolSet(nextSymbolSet: string) {
+    const nextSet = SYMBOL_SETS.find((set) => set.code === nextSymbolSet) ?? SYMBOL_SETS[0];
+    setSymbolSet(nextSet.code);
+    setEntity(nextSet.defaultEntity);
+    if (!nextSet.allowEchelon) setEchelon('00');
+    if (!nextSet.allowHq) setHq(false);
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-gray-950/97 pt-[max(0.5rem,env(safe-area-inset-top))]">
@@ -45,6 +62,24 @@ export default function SymbolCreator({ initialSidc, initialLabel = '', onSave, 
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
+        <section className="mb-5">
+          <h3 className="mb-2 text-sm font-semibold text-gray-400">Symbol type</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {SYMBOL_SETS.map((set) => (
+              <button
+                key={set.code}
+                onClick={() => chooseSymbolSet(set.code)}
+                className={`rounded-lg p-3 text-left ${
+                  symbolSet === set.code ? 'bg-sky-600 text-white' : 'bg-gray-800 text-gray-300'
+                }`}
+              >
+                <span className="block text-sm font-semibold">{set.name}</span>
+                <span className="mt-1 block text-xs opacity-80">{set.description}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
         <section className="mb-5">
           <h3 className="mb-2 text-sm font-semibold text-gray-400">Affiliation</h3>
           <div className="grid grid-cols-4 gap-2">
@@ -65,7 +100,7 @@ export default function SymbolCreator({ initialSidc, initialLabel = '', onSave, 
         <section className="mb-5">
           <h3 className="mb-2 text-sm font-semibold text-gray-400">Icon</h3>
           <div className="grid grid-cols-4 gap-2">
-            {LAND_UNIT_ICONS.map((icon) => (
+            {activeSet.icons.map((icon) => (
               <button
                 key={icon.entity}
                 onClick={() => setEntity(icon.entity)}
@@ -80,26 +115,30 @@ export default function SymbolCreator({ initialSidc, initialLabel = '', onSave, 
           </div>
         </section>
 
-        <section className="mb-5">
-          <h3 className="mb-2 text-sm font-semibold text-gray-400">Echelon</h3>
-          <select
-            value={echelon}
-            onChange={(e) => setEchelon(e.target.value)}
-            className="w-full rounded-lg bg-gray-800 px-4 py-3 text-base outline-none"
-          >
-            {ECHELONS.map((e) => (
-              <option key={e.code} value={e.code}>
-                {e.name}
-              </option>
-            ))}
-          </select>
-        </section>
+        {activeSet.allowEchelon && (
+          <section className="mb-5">
+            <h3 className="mb-2 text-sm font-semibold text-gray-400">Echelon</h3>
+            <select
+              value={echelon}
+              onChange={(e) => setEchelon(e.target.value)}
+              className="w-full rounded-lg bg-gray-800 px-4 py-3 text-base outline-none"
+            >
+              {ECHELONS.map((e) => (
+                <option key={e.code} value={e.code}>
+                  {e.name}
+                </option>
+              ))}
+            </select>
+          </section>
+        )}
 
         <section className="mb-5 flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-gray-300">
-            <input type="checkbox" checked={hq} onChange={(e) => setHq(e.target.checked)} className="h-5 w-5" />
-            Headquarters
-          </label>
+          {activeSet.allowHq && (
+            <label className="flex items-center gap-2 text-sm text-gray-300">
+              <input type="checkbox" checked={hq} onChange={(e) => setHq(e.target.checked)} className="h-5 w-5" />
+              Headquarters
+            </label>
+          )}
           <label className="flex items-center gap-2 text-sm text-gray-300">
             <input
               type="checkbox"
